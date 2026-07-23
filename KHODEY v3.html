@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KHODEY - Sistem Enkripsi & Konversi Sandi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0f1115', 
+                        card: '#1a1d24', 
+                        input: '#242830',
+                        primary: '#2b6fff', 
+                        secondary: '#6c7293', 
+                        success: '#00d68f', 
+                        danger: '#ff4d4f',
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .mode-btn { @apply transition-all duration-200; }
+            .overlay-fade { @apply transition-opacity duration-500 ease-out; }
+            .morse-btn-main { @apply active:scale-95 transition-all select-none cursor-pointer; }
+            .ripple { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.4); transform: scale(0); animation: rippleAnim 0.6s ease-out; pointer-events: none; }
+            @keyframes rippleAnim { to { transform: scale(4); opacity: 0; } }
+            @keyframes fadeInOut { 0% { opacity:0; transform: translateY(10px); } 20% { opacity:1; transform: translateY(0); } 80% { opacity:1; transform: translateY(0); } 100% { opacity:0; transform: translateY(-10px); } }
+            .fade-io { animation: fadeInOut 0.5s ease-out forwards; }
+        }
+    </style>
+</head>
+<body class="bg-dark text-gray-200 min-h-screen">
+<div id="mainApp" class="container max-w-3xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h1 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold text-primary mb-2">
+            <i class="fa fa-shield mr-2"></i>KHODEY
+        </h1>
+        <p class="text-secondary text-sm">Sistem Enkripsi & Konversi Sandi</p>
+    </div>
+
+    <!-- Card Utama -->
+    <div class="bg-card rounded-xl shadow-2xl p-4 md:p-6 mb-6 border border-gray-700 relative">
+        
+        <!-- OVERLAY LOADING -->
+        <div id="loadingOverlay" class="absolute inset-0 bg-dark/95 rounded-xl flex flex-col items-center justify-center z-50 overlay-fade opacity-0 pointer-events-none">
+            <i id="loadingIcon" class="fa fa-spinner fa-spin text-5xl text-primary mb-4"></i>
+            <h3 id="loadingTitle" class="text-xl font-semibold mb-4">Memproses...</h3>
+            <div class="w-4/5 max-w-sm mb-3">
+                <div class="w-full h-4 bg-gray-700 rounded-full overflow-hidden">
+                    <div id="progressBar" class="h-full bg-primary rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+                </div>
+            </div>
+            <p id="progressPercent" class="text-lg font-bold mb-4">0%</p>
+            <p id="loadingMessage" class="text-gray-400 text-center">Memulai proses...</p>
+        </div>
+
+        <!-- PILIHAN JENIS CIPHER -->
+        <div class="mb-5">
+            <label class="block text-gray-400 text-sm font-semibold mb-2">JENIS METODE</label>
+            <select id="cipherMode" class="w-full bg-input border border-gray-600 rounded-lg p-3 text-gray-200">
+                <option value="veajt">VE AJT Standar</option>
+                <option value="veajtcipher">VE AJT Cipher (Kunci Rahasia)</option>
+                <option value="binary">Konversi Biner</option>
+                <option value="morse">Kode Morse</option>
+                <option value="enigma">Enigma Machine</option>
+            </select>
+        </div>
+
+        <!-- SUB-MODE MORSE -->
+        <div class="mb-5 hidden" id="morseSubMode">
+            <label class="block text-gray-400 text-sm font-semibold mb-2">JENIS KODE MORSE</label>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="setMorseMode('teks')" id="morseTeksBtn" class="bg-primary text-white py-2 rounded-lg text-sm font-semibold">
+                    <i class="fa fa-font mr-1"></i> Teks
+                </button>
+                <button onclick="setMorseMode('suara')" id="morseSuaraBtn" class="bg-input text-gray-300 py-2 rounded-lg text-sm font-semibold">
+                    <i class="fa fa-volume-up mr-1"></i> Suara
+                </button>
+            </div>
+        </div>
+
+        <!-- MODE OPERASI -->
+        <div class="mb-5">
+            <label class="block text-gray-400 text-sm font-semibold mb-2">MODE OPERASI</label>
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btnEncode" onclick="setMode('encode')" class="mode-btn bg-primary text-white py-3 rounded-lg">
+                    <i class="fa fa-lock"></i> ENKRIPSI
+                </button>
+                <button id="btnDecode" onclick="setMode('decode')" class="mode-btn bg-input text-gray-300 py-3 rounded-lg">
+                    <i class="fa fa-unlock"></i> DEKRIPSI
+                </button>
+            </div>
+        </div>
+
+        <!-- INPUT TEKS -->
+        <div class="mb-4">
+            <label class="block text-gray-400 text-sm font-semibold mb-2" id="labelInput">MASUKKAN TEKS</label>
+            <textarea id="inputText" class="w-full bg-input border border-gray-600 rounded-lg p-3 h-28 resize-none" placeholder="Masukkan teks atau kode di sini..."></textarea>
+        </div>
+
+        <!-- KUNCI RAHASIA -->
+        <div class="mb-5" id="keyContainer" style="display: none;">
+            <label class="block text-gray-400 text-sm font-semibold mb-2 flex justify-between">
+                <span>🔑 KUNCI RAHASIA</span>
+                <button onclick="generateKey()" class="text-primary text-xs">
+                    <i class="fa fa-refresh"></i> Buat Acak
+                </button>
+            </label>
+            <input id="keyInput" type="text" class="w-full bg-input border border-gray-600 rounded-lg p-3" placeholder="Masukkan kunci rahasia">
+            <small class="text-gray-500 text-xs mt-1 block" id="keyHint"></small>
+        </div>
+
+        <!-- TOMBOL PROSES -->
+        <button onclick="processCipher()" class="w-full bg-success hover:bg-success/90 text-white font-bold py-3 rounded-lg mb-5">
+            <i class="fa fa-play" id="processIcon"></i> 
+            <span id="processText">PROSES SEKARANG</span>
+        </button>
+
+        <!-- OUTPUT HASIL -->
+        <div class="mb-4">
+            <label class="block text-gray-400 text-sm font-semibold mb-2" id="outputLabel">HASIL</label>
+            <textarea id="outputText" class="w-full bg-input border border-gray-600 rounded-lg p-3 h-28 resize-none" readonly placeholder="Hasil pemrosesan akan muncul di sini..."></textarea>
+        </div>
+
+        <!-- KONTROL SUARA MORSE -->
+        <div id="morseSoundControls" class="hidden mb-5">
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button onclick="playMorseSound()" class="bg-primary hover:bg-primary/90 py-3 rounded-lg font-semibold">
+                    <i class="fa fa-play-circle mr-1"></i> 🔊 Ubah Jadi Suara
+                </button>
+                <button onclick="stopMorseSound()" class="bg-danger hover:bg-danger/90 py-3 rounded-lg font-semibold">
+                    <i class="fa fa-stop-circle mr-1"></i> ⏹️ Hentikan
+                </button>
+            </div>
+            <button onclick="openManualMorse()" class="w-full bg-success/20 hover:bg-success/30 text-success py-3 rounded-lg font-semibold">
+                <i class="fa fa-keyboard-o mr-1"></i> 🎛️ BUAT KODE MORSE MANUAL
+            </button>
+        </div>
+
+        <!-- TOMBOL SALIN & BERSIHKAN -->
+        <div class="grid grid-cols-2 gap-3">
+            <button onclick="copyOutput()" class="bg-secondary/20 hover:bg-secondary/30 py-2 rounded-lg">
+                <i class="fa fa-copy"></i> Salin Hasil
+            </button>
+            <button onclick="clearAll()" class="bg-danger/20 hover:bg-danger/30 py-2 rounded-lg">
+                <i class="fa fa-trash"></i> Bersihkan
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- LAYAR PENUH: BUAT KODE MORSE MANUAL -->
+<div id="manualMorseScreen" class="fixed inset-0 bg-dark z-[100] hidden flex flex-col">
+    <div class="flex justify-between items-center p-4">
+        <button onclick="closeManualMorse()" class="text-gray-300 hover:text-white text-lg">
+            <i class="fa fa-arrow-left mr-1"></i> Kembali
+        </button>
+        <button onclick="openMorseGuide()" class="text-gray-300 hover:text-white text-lg">
+            <i class="fa fa-book"></i> Panduan
+        </button>
+    </div>
+
+    <div class="flex-1 flex flex-col items-center justify-center px-4">
+        <p class="text-sm text-gray-500 mb-1">Kode yang sedang dibuat:</p>
+        <p id="kodeSementara" class="text-4xl font-mono text-primary mb-4 tracking-widest"></p>
+        <div class="text-sm text-gray-500 mb-1">Huruf yang terdeteksi:</div>
+        <div id="hurufTerdeteksi" class="text-7xl font-bold text-success h-[100px] flex items-center justify-center"></div>
+    </div>
+
+    <div class="flex justify-center mb-6 relative">
+        <button id="tombolMorseUtama" class="morse-btn-main w-[160px] h-[160px] rounded-full bg-primary/20 border-4 border-primary text-primary flex items-center justify-center text-3xl relative overflow-hidden">
+            <i class="fa fa-dot-circle-o"></i>
+        </button>
+    </div>
+
+    <!-- BARIS TOMBOL DITAMBAH OPSI BATAL -->
+    <div class="grid grid-cols-3 gap-3 px-4 mb-6">
+        <button onclick="batalKarakter()" class="bg-danger/30 hover:bg-danger/50 py-3 rounded-lg text-sm font-semibold">
+            <i class="fa fa-times mr-1"></i> ❌ Batalkan
+        </button>
+        <button onclick="tambahSpasiHuruf()" class="bg-secondary/30 hover:bg-secondary/50 py-3 rounded-lg text-sm font-semibold">
+            <i class="fa fa-minus mr-1"></i> ✔️ Selesai Huruf
+        </button>
+        <button onclick="tambahSpasiKata()" class="bg-secondary/30 hover:bg-secondary/50 py-3 rounded-lg text-sm font-semibold">
+            <i class="fa fa-arrows-h mr-1"></i> Jeda Kata
+        </button>
+    </div>
+</div>
+
+<!-- POPUP PANDUAN -->
+<div id="panduanPopup" class="fixed inset-0 bg-black/80 z-[110] hidden flex items-center justify-center p-4">
+    <div class="bg-card rounded-xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto border border-gray-700">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-primary">📖 Panduan Kode Morse</h3>
+            <button onclick="tutupPanduan()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+            <div>A ·−</div><div>B −···</div>
+            <div>C −·−·</div><div>D −··</div>
+            <div>E ·</div><div>F ··−·</div>
+            <div>G −−·</div><div>H ····</div>
+            <div>I ··</div><div>J ·−−−</div>
+            <div>K −·−</div><div>L ·−··</div>
+            <div>M −−</div><div>N −·</div>
+            <div>O −−−</div><div>P ·−−·</div>
+            <div>Q −−·−</div><div>R ·−·</div>
+            <div>S ···</div><div>T −</div>
+            <div>U ··−</div><div>V ···−</div>
+            <div>W ·−−</div><div>X −··−</div>
+            <div>Y −·−−</div><div>Z −−··</div>
+            <div class="mt-2 font-semibold col-span-2">Angka</div>
+            <div>0 −−−−−</div><div>1 ·−−−−</div>
+            <div>2 ··−−−</div><div>3 ···−−</div><div>4 ····−</div>
+            <div>5 ·····</div><div>6 −····</div><div>7 −−···</div><div>8 −−−··</div>
+            <div>9 −−−−·</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // KAMUS DATA
+    const encodeMap = {'A':'1','B':'2','C':'3','D':'4','E':'5','F':'6','G':'7','H':'8','I':'9','J':'0²','K':'1²','L':'2²','M':'3²','N':'4²','O':'5²','P':'6²','Q':'7²','R':'8²','S':'9²','T':'0³','U':'1³','V':'2³','W':'3³','X':'4³','Y':'5³','Z':'6³',' ':'0'};
+    const decodeMap = {'1':'A','2':'B','3':'C','4':'D','5':'E','6':'F','7':'G','8':'H','9':'I','0²':'J','1²':'K','2²':'L','3²':'M','4²':'N','5²':'O','6²':'P','7²':'Q','8²':'R','9²':'S','0³':'T','1³':'U','2³':'V','3³':'W','4³':'X','5³':'Y','6³':'Z','0':' '};
+    const morseMap = {'A':'.-','B':'-...','C':'-.-.','D':'-..','E':'.','F':'..-.','G':'--.','H':'....','I':'..','J':'.---','K':'-.-','L':'.-..','M':'--','N':'-.','O':'---','P':'.--.','Q':'--.-','R':'.-.','S':'...','T':'-','U':'..-','V':'...-','W':'.--','X':'-..-','Y':'-.--','Z':'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',' ':'/'};
+    const reverseMorse = {}; for(let k in morseMap) reverseMorse[morseMap[k]] = k;
+
+    // VARIABEL
+    let currentMode = 'encode', currentMorseMode = 'teks', animationInterval;
+    let audioContext, osAktif = null, isPlaying = false;
+    let waktuTekanMulai, tekanLamaTimer, kodeSementara = '';
+    const BATAS_TEKN_LAMA = 250;
+
+    // FUNGSI SUARA
+    function initAudio(){ if(!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
+    function stopSemuaSuara(){ if(osAktif){ osAktif.stop(); osAktif = null; } clearTimeout(tekanLamaTimer); }
+    function playTone(durasi){ initAudio(); stopSemuaSuara(); const os = audioContext.createOscillator(), gn = audioContext.createGain(); os.connect(gn); gn.connect(audioContext.destination); os.frequency.value = 600; gn.gain.value = 0.3; os.type = 'sine'; os.start(); if(durasi>0){ setTimeout(()=>os.stop(), durasi); } else { osAktif = os; } }
+    async function playMorseSound(){ if(isPlaying) return; const kode = document.getElementById('outputText').value.trim(); if(!kode){alert('Tidak ada kode!');return;} initAudio(); isPlaying = true; const titik=150, garis=450, spasiHuruf=450, spasiKata=1050; for(let c of kode){ if(!isPlaying)break; if(c==='.'){playTone(titik);await tunggu(titik+50);} else if(c==='-'){playTone(garis);await tunggu(garis+50);} else if(c===' ')await tunggu(spasiHuruf); else if(c==='/')await tunggu(spasiKata); } isPlaying=false; }
+    function stopMorseSound(){ isPlaying=false; stopSemuaSuara(); }
+    function tunggu(ms){return new Promise(r=>setTimeout(r,ms));}
+
+    // FUNGSI BARU: BATALKAN KARAKTER YANG SEDANG DIBUAT
+    function batalKarakter(){
+        if(!kodeSementara) return;
+        // Hapus kode terakhir dari output utama
+        const output = document.getElementById('outputText');
+        output.value = output.value.slice(0, -kodeSementara.length);
+        // Kosongkan tampilan sementara
+        kodeSementara = '';
+        document.getElementById('kodeSementara').innerText = '';
+        document.getElementById('hurufTerdeteksi').innerText = '';
+        navigator.vibrate?.([30,50,30]); // Getaran tanda dibatalkan
+    }
+
+    // LAYAR MANUAL MORSE
+    function openManualMorse(){ document.getElementById('mainApp').classList.add('hidden'); document.getElementById('manualMorseScreen').classList.remove('hidden'); kodeSementara=''; document.getElementById('kodeSementara').innerText=''; document.getElementById('hurufTerdeteksi').innerText=''; }
+    function closeManualMorse(){ stopSemuaSuara(); document.getElementById('manualMorseScreen').classList.add('hidden'); document.getElementById('mainApp').classList.remove('hidden'); }
+    function openMorseGuide(){ document.getElementById('panduanPopup').classList.remove('hidden'); }
+    function tutupPanduan(){ document.getElementById('panduanPopup').classList.add('hidden'); }
+    
+    function tambahSpasiHuruf(){
+        if(kodeSementara){
+            document.getElementById('outputText').value += ' ';
+            kodeSementara='';
+            document.getElementById('kodeSementara').innerText = '';
+            document.getElementById('hurufTerdeteksi').innerText = '';
+        }
+    }
+    function tambahSpasiKata(){
+        if(kodeSementara){
+            document.getElementById('outputText').value += ' / ';
+            kodeSementara='';
+            document.getElementById('kodeSementara').innerText = '';
+            document.getElementById('hurufTerdeteksi').innerText = '';
+        } else {
+            document.getElementById('outputText').value += ' / ';
+        }
+    }
+
+    function cekHuruf(){
+        const elHuruf = document.getElementById('hurufTerdeteksi');
+        if(reverseMorse[kodeSementara]){
+            elHuruf.innerText = reverseMorse[kodeSementara];
+            elHuruf.classList.add('fade-io');
+            setTimeout(()=> elHuruf.classList.remove('fade-io'), 500);
+        } else {
+            elHuruf.innerText = '';
+        }
+    }
+
+    // EVENT TOMBOL UTAMA
+    document.addEventListener('DOMContentLoaded', ()=>{
+        const btn = document.getElementById('tombolMorseUtama');
+        btn.addEventListener('mousedown', tekanMulai);
+        btn.addEventListener('touchstart', e=>{e.preventDefault();tekanMulai();});
+        btn.addEventListener('mouseup', tekanSelesai);
+        btn.addEventListener('touchend', e=>{e.preventDefault();tekanSelesai();});
+        btn.addEventListener('mouseleave', tekanSelesai);
+    });
+
+    function tekanMulai(){
+        waktuTekanMulai = Date.now();
+        navigator.vibrate?.([20]);
+        const btn = document.getElementById('tombolMorseUtama');
+        btn.classList.add('border-success','bg-success/20');
+        tambahRipple();
+        tekanLamaTimer = setTimeout(()=> playTone(0), BATAS_TEKN_LAMA);
+    }
+
+    function tekanSelesai(){
+        const lama = Date.now() - waktuTekanMulai;
+        stopSemuaSuara();
+        const btn = document.getElementById('tombolMorseUtama');
+        btn.classList.remove('border-success','bg-success/20');
+
+        if(lama < BATAS_TEKN_LAMA){
+            playTone(150);
+            kodeSementara += '.';
+            document.getElementById('outputText').value += '.';
+        } else {
+            playTone(450);
+            kodeSementara += '-';
+            document.getElementById('outputText').value += '-';
+        }
+        
+        document.getElementById('kodeSementara').innerText = kodeSementara;
+        cekHuruf();
+    }
+
+    function tambahRipple(){ const btn = document.getElementById('tombolMorseUtama'); const r = document.createElement('span'); r.classList.add('ripple'); r.style.left='50%';r.style.top='50%'; btn.appendChild(r); setTimeout(()=>r.remove(),600); }
+
+    // FUNGSI LAINNYA TETAP UTUH
+    function setMorseMode(mode){ currentMorseMode=mode; document.querySelectorAll('#morseTeksBtn,#morseSuaraBtn').forEach(b=>{b.classList.remove('bg-primary','text-white');b.classList.add('bg-input','text-gray-300');}); if(mode==='teks'){document.getElementById('morseTeksBtn').classList.add('bg-primary','text-white');document.getElementById('morseSoundControls').classList.add('hidden');}else{document.getElementById('morseSuaraBtn').classList.add('bg-primary','text-white');document.getElementById('morseSoundControls').classList.remove('hidden');} }
+    async function showLoadingAnimation(mode){ const overlay=document.getElementById('loadingOverlay'),bar=document.getElementById('progressBar'),percent=document.getElementById('progressPercent'),msg=document.getElementById('loadingMessage'),icon=document.getElementById('loadingIcon'),title=document.getElementById('loadingTitle'); overlay.classList.remove('opacity-0','pointer-events-none');overlay.classList.add('opacity-100'); title.innerText=mode==='encode'?'🔐 Sedang Mengenkripsi...':'🔓 Sedang Mendekripsi...'; const pesan=["Menyiapkan sistem sandi...","Membuat kunci rahasia...","Mengolah karakter teks...","Mengamankan hasil keluaran...","Menyelesaikan proses..."]; let progress=0,idx=0; bar.style.width='0%';percent.innerText='0%';icon.className='fa fa-spinner fa-spin text-5xl text-primary mb-4'; animationInterval=setInterval(()=>{progress+=Math.random()*12+3;if(progress>=100)progress=100;bar.style.width=`${progress}%`;percent.innerText=`${Math.round(progress)}%`;if(progress>20*(idx+1)&&idx<pesan.length-1){idx++;msg.innerText=pesan[idx];}if(progress===100){clearInterval(animationInterval);bar.classList.remove('bg-primary');bar.classList.add('bg-success');icon.className='fa fa-check-circle text-5xl text-success mb-4';title.innerText=mode==='encode'?'✅ Enkripsi Selesai':'✅ Dekripsi Selesai';msg.innerText="Siap digunakan!";}},100);await new Promise(r=>setTimeout(r,1600)); }
+    async function hideLoadingOverlay(){ const overlay=document.getElementById('loadingOverlay');overlay.classList.remove('opacity-100');overlay.classList.add('opacity-0');await new Promise(r=>setTimeout(r,500));overlay.classList.add('pointer-events-none');document.getElementById('progressBar').classList.remove('bg-success');document.getElementById('progressBar').classList.add('bg-primary'); }
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", rotor1 = "EKMFLGDQVZNTOWYHXUSPAIBRCJ", rotor2 = "AJDKSIRUXBLHWTMCQGZNPYFVOE", rotor3 = "BDFHJLCPRTXVZNYEIWGAKMUSQO", reflector = "YRUHQSLDPXNGOKMIEBFZCWVJAT";
+    function rotorForward(c,r,p){let i=alphabet.indexOf(c);i=(i+p)%26;return r[i];}
+    function rotorBackward(c,r,p){let i=r.indexOf(c);i=(i-p+26)%26;return alphabet[i];}
+    function getRotorPositions(k){k=k.toUpperCase();let p1=0,p2=0,p3=0;if(k.length>0)p1=Math.max(0,alphabet.indexOf(k[0]));if(k.length>1)p2=Math.max(0,alphabet.indexOf(k[1]));if(k.length>2)p3=Math.max(0,alphabet.indexOf(k[2]));return[p1,p2,p3];}
+    function enigmaCipher(t,k){t=t.toUpperCase();let res="";let[p1,p2,p3]=getRotorPositions(k);for(let c of t){if(!alphabet.includes(c)){res+=c;continue;}let x=c;x=rotorForward(x,rotor1,p1);x=rotorForward(x,rotor2,p2);x=rotorForward(x,rotor3,p3);x=reflector[alphabet.indexOf(x)];x=rotorBackward(x,rotor3,p3);x=rotorBackward(x,rotor2,p2);x=rotorBackward(x,rotor1,p1);res+=x;p1++;if(p1>=26){p1=0;p2++;}if(p2>=26){p2=0;p3++;}p3%=26;}return res;}
+    function setMode(m){currentMode=m;document.querySelectorAll('.mode-btn').forEach(b=>{b.classList.remove('bg-primary','text-white');b.classList.add('bg-input','text-gray-300');});if(m==='encode'){document.getElementById('btnEncode').classList.add('bg-primary','text-white');document.getElementById('btnEncode').classList.remove('bg-input','text-gray-300');}else{document.getElementById('btnDecode').classList.add('bg-primary','text-white');document.getElementById('btnDecode').classList.remove('bg-input','text-gray-300');}document.getElementById('labelInput').innerText=m==='encode'?'MASUKKAN TEKS':'MASUKKAN KODE';document.getElementById('outputLabel').innerText=m==='encode'?'HASIL':'HASIL DEKRIPSI';}
+    function generateKey(){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';let k='';for(let i=0;i<10;i++)k+=c[Math.floor(Math.random()*c.length)];document.getElementById('keyInput').value=k;}
+    function kunciToShifts(k,l){let s=[],sd=0;for(let c of k)sd+=c.charCodeAt(0);if(sd===0)sd=12345;for(let i=0;i<l;i++){sd=(sd*1103515245+12345)%2147483648;s.push((Math.abs(sd)%9)+1);}return s;}
+    function shiftDigits(t,s){return t.split('').map(c=>c>='0'&&c<='9'?((parseInt(c)+s)%10).toString():c).join('');}
+    function unshiftDigits(t,s){return t.split('').map(c=>c>='0'&&c<='9'?((parseInt(c)-s+10)%10).toString():c).join('');}
+    function encode(t,s){let r='';t=t.toUpperCase();for(let i=0;i<t.length;i++){const c=t[i];r+=encodeMap[c]?shiftDigits(encodeMap[c],s[i])+' ':c+' ';}return r.trim();}
+    function decode(t,s){let r='';const p=t.trim().split(' ');for(let i=0;i<p.length;i++){if(!p[i])continue;r+=decodeMap[unshiftDigits(p[i],s[i])]||p[i];}return r;}
+    function textToBinary(t){return t.split('').map(c=>c.charCodeAt(0).toString(2).padStart(8,'0')).join(' ');}
+    function binaryToText(b){return b.split(' ').filter(x=>x).map(x=>String.fromCharCode(parseInt(x,2))).join('');}
+    function textToMorse(t){return t.toUpperCase().split('').map(c=>morseMap[c]||c).join(' ');}
+    function morseToText(t){return t.split(' ').map(c=>reverseMorse[c]||c).join('');}
+    async function processCipher(){const i=document.getElementById('inputText').value,k=document.getElementById('keyInput').value.trim(),m=document.getElementById('cipherMode').value,o=document.getElementById('outputText');if(!i){alert('Input tidak boleh kosong!');return;}if((m==='veajtcipher'||m==='enigma')&&!k){alert('Kunci wajib diisi!');return;}await showLoadingAnimation(currentMode);let r='';if(m==='veajt'){r=currentMode==='encode'?i.toUpperCase().split('').map(c=>encodeMap[c]||c).join(' '):i.split(' ').map(c=>decodeMap[c]||c).join('');}else if(m==='veajtcipher'){r=currentMode==='encode'?encode(i,kunciToShifts(k,i.length)):decode(i,kunciToShifts(k,i.trim().split(' ').length));}else if(m==='binary'){r=currentMode==='encode'?textToBinary(i):binaryToText(i);}else if(m==='morse'){r=currentMode==='encode'?textToMorse(i):morseToText(i);}else if(m==='enigma')r=enigmaCipher(i,k);o.value=r;await hideLoadingOverlay();}
+    function copyOutput(){const o=document.getElementById('outputText');if(!o.value)return;o.select();document.execCommand('copy');alert('✅ Disalin ke Papan Klip!');}
+    function clearAll(){document.getElementById('inputText').value='';document.getElementById('keyInput').value='';document.getElementById('outputText').value='';stopMorseSound();}
+    document.addEventListener('DOMContentLoaded',()=>{const s=document.getElementById('cipherMode'),kb=document.getElementById('keyContainer'),ms=document.getElementById('morseSubMode'),sc=document.getElementById('morseSoundControls'),h=document.getElementById('keyHint');s.addEventListener('change',()=>{sc.classList.add('hidden');if(s.value==='morse'){ms.classList.remove('hidden');setMorseMode('teks');}else ms.classList.add('hidden');if(s.value==='veajtcipher'||s.value==='enigma'){kb.style.display='block';h.innerText=s.value==='enigma'?'Enigma: Kunci 1-3 huruf contoh ABC':'VE AJT: Kunci bebas huruf/angka';}else kb.style.display='none';});});
+</script>
+</body>
+</html>
